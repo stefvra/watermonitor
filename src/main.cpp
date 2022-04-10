@@ -7,38 +7,51 @@ The range readings are in units of mm. */
 
 
 #include <Wire.h>
-#include <WiFi.h>
-#include <WebServer.h>
-#include <VL53L0X.h>
-#include <SFE_BMP180.h>
+//#include <WiFi.h>
+//#include <WebServer.h>
+//#include <SFE_BMP180.h>
 #include "secrets.h"
+#include "sensor.h"
+#include "client.h"
 
-VL53L0X sensor;
-SFE_BMP180 pressure;
+DistanceSensor distanceSensor;
+PostClient postclient = PostClient("192.168.1.22", "add", 5001);
 
-void handle_root();
+int d;
+//SFE_BMP180 pressure;
 
-WebServer server(80); // Object of WebServer(HTTP port, 80 is defult)
+//void handle_root();
+
+//WebServer server(80); // Object of WebServer(HTTP port, 80 is defult)
 
 
 void setup() {
   Serial.begin(9600);
+  Serial.println("starting");
   Wire.begin();
 
-  sensor.setTimeout(500);
-  if (!sensor.init())
-  {
-  Serial.println("Failed to detect and initialize sensor!");
-  while (1) {}
+  distanceSensor.init();
+
+
+  // Connect to your wi-fi modem
+
+  WiFi.begin(_SSID, PWD);
+
+  // Check wi-fi is connected to wi-fi network
+  while (WiFi.status() != WL_CONNECTED) {
+  delay(500);
+  Serial.print(".");
   }
+  Serial.println("");
+  Serial.println("WiFi connected successfully");
+  Serial.print("Got IP: ");
+  Serial.println(WiFi.localIP()); //Show ESP32 IP on serial
 
 
-  // setup for long range mode
-  // lower the return signal rate limit (default is 0.25 MCPS)
-  sensor.setSignalRateLimit(0.1);
-  // increase laser pulse periods (defaults are 14 and 10 PCLKs)
-  sensor.setVcselPulsePeriod(VL53L0X::VcselPeriodPreRange, 18);
-  sensor.setVcselPulsePeriod(VL53L0X::VcselPeriodFinalRange, 14);
+
+
+
+  /*
 
 
   // BMP180 sensor
@@ -58,45 +71,26 @@ void setup() {
 
 
 
-  // Connect to your wi-fi modem
-
-  WiFi.begin(SSID, PWD);
-
-  // Check wi-fi is connected to wi-fi network
-  while (WiFi.status() != WL_CONNECTED) {
-  delay(500);
-  Serial.print(".");
-  }
-  Serial.println("");
-  Serial.println("WiFi connected successfully");
-  Serial.print("Got IP: ");
-  Serial.println(WiFi.localIP()); //Show ESP32 IP on serial
-
   server.on("/", handle_root);
   server.begin();
   Serial.println("HTTP server started");
 
   delay(100);
+  */
 }
 
 void loop() {
-  server.handleClient();
+  d = distanceSensor.measure();
+  postclient.post("distance", d);
+  delay(5000);
 }
 
-
+/*
 // Handle root url (/)
 void handle_root() {
   Serial.println("request received...");
 
-  int D;
-  D = sensor.readRangeSingleMillimeters();
-  if (sensor.timeoutOccurred()){
-  Serial.println("Distance sensor TIMEOUT");
-  } else {
-  Serial.print("distance: ");
-  Serial.print(D);
-  Serial.println(" mm");
-  }
+
   delay(300);
 
   // pressure and temp readings
@@ -152,7 +146,5 @@ void handle_root() {
   }
   else Serial.println("error starting temperature measurement\n");
 
-  String response;
-  response = "Dist: " + String(D) + ", temp" + String(T) + ", press" + String(P);
-  server.send(200, "text/plain", response);
 }
+*/
