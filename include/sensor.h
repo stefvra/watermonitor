@@ -23,3 +23,13 @@ class DistanceSensor : public Sensor {
     void init();
 };
 
+
+class VoltageSensor : public Sensor {
+    private:
+    int pin = 33;
+    public:
+    VoltageSensor();
+    VoltageSensor(int _pin);
+    int measure();
+    void init();
+};

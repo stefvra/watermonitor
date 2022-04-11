@@ -15,9 +15,10 @@ The range readings are in units of mm. */
 #include "client.h"
 
 DistanceSensor distanceSensor;
+VoltageSensor voltageSensor;
 PostClient postclient = PostClient("192.168.1.22", "add", 5001);
 
-int d;
+int d, v;
 //SFE_BMP180 pressure;
 
 //void handle_root();
@@ -31,6 +32,7 @@ void setup() {
   Wire.begin();
 
   distanceSensor.init();
+  voltageSensor.init();
 
 
   // Connect to your wi-fi modem
@@ -81,7 +83,10 @@ void setup() {
 
 void loop() {
   d = distanceSensor.measure();
+  v = voltageSensor.measure();
   postclient.post("distance", d);
+  delay(500);
+  postclient.post("voltage", v);
   delay(5000);
 }
 

@@ -45,3 +45,28 @@ int DistanceSensor::measure() {
   }
   return D;
 }
+
+
+
+
+
+VoltageSensor::VoltageSensor(int _pin) {
+  pin = _pin;
+}
+
+VoltageSensor::VoltageSensor() {}
+
+
+
+void VoltageSensor::init() {
+  pinMode(pin, INPUT);
+}
+
+
+
+int VoltageSensor::measure() {
+
+  int D;
+  D = analogRead(pin);
+  return D;
+}
