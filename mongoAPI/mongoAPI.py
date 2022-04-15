@@ -15,15 +15,16 @@ app = Flask(__name__)
 
 @app.route("/add", methods = ['POST'])
 def add():
+    app.logger.info("post request received")
     try:
-        print(request.data)
+        app.logger.info(request.data)
         data = json.loads(request.data)
         data['date'] = datetime.datetime.now()
-        print(data)
+        app.logger.info(data)
         client[database][collection].insert_one(data)
         return dumps({'message' : 'SUCCESS'})
     except Exception as e:
-        print(e)
+        app.logger.info(e)
         return dumps({'error' : str(e)})
 
 if __name__ == '__main__':
