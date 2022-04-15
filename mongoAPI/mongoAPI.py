@@ -1,3 +1,4 @@
+import datetime
 from flask import Flask
 from flask import request
 from pymongo import MongoClient
@@ -17,6 +18,7 @@ def add():
     try:
         print(request.data)
         data = json.loads(request.data)
+        data['date'] = datetime.datetime.now()
         print(data)
         client[database][collection].insert_one(data)
         return dumps({'message' : 'SUCCESS'})
