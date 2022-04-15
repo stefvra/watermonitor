@@ -14,11 +14,19 @@ The range readings are in units of mm. */
 #include "sensor.h"
 #include "client.h"
 
-DistanceSensor distanceSensor;
-VoltageSensor voltageSensor;
-PostClient postclient = PostClient("192.168.1.22", "add", 5001);
+#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  60        /* Time ESP32 will go to sleep (in seconds) */
 
-int d, v;
+
+
+DistanceSensor distanceSensor;
+VoltageSensor InputVoltageSensor = VoltageSensor(32);
+VoltageSensor SupplyVoltageSensor = VoltageSensor(33);
+VoltageSensor PVVoltageSensor = VoltageSensor(35);
+VoltageSensor BatteryVoltageSensor = VoltageSensor(34);
+PostClient postclient = PostClient(SERVER_IP, "add", SERVER_PORT);
+
+int d, v_in, v_supply, v_pv, v_batt;
 //SFE_BMP180 pressure;
 
 //void handle_root();
@@ -32,7 +40,11 @@ void setup() {
   Wire.begin();
 
   distanceSensor.init();
-  voltageSensor.init();
+  InputVoltageSensor.init();
+  SupplyVoltageSensor.init();
+  PVVoltageSensor.init();
+  BatteryVoltageSensor.init();
+
 
 
   // Connect to your wi-fi modem
@@ -49,8 +61,29 @@ void setup() {
   Serial.print("Got IP: ");
   Serial.println(WiFi.localIP()); //Show ESP32 IP on serial
 
+  /*
+  d = distanceSensor.measure();
+  v_in = InputVoltageSensor.measure();
+  v_supply = SupplyVoltageSensor.measure();
+  v_pv = PVVoltageSensor.measure();
+  v_batt = BatteryVoltageSensor.measure();
+  postclient.post("distance", d);
+  delay(500);
+  postclient.post("input_voltage", v_in);
+  delay(500);
+  postclient.post("supply_voltage", v_supply);
+  delay(500);
+  postclient.post("pv_voltage", v_pv);
+  delay(500);
+  postclient.post("battery_min_voltage", v_batt);
+  delay(500);
+  */
+  //Serial.flush(); 
 
 
+
+  //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  //esp_deep_sleep_start();
 
 
   /*
@@ -83,11 +116,20 @@ void setup() {
 
 void loop() {
   d = distanceSensor.measure();
-  v = voltageSensor.measure();
+  v_in = InputVoltageSensor.measure();
+  v_supply = SupplyVoltageSensor.measure();
+  v_pv = PVVoltageSensor.measure();
+  v_batt = BatteryVoltageSensor.measure();
   postclient.post("distance", d);
   delay(500);
-  postclient.post("voltage", v);
-  delay(5000);
+  postclient.post("input_voltage", v_in);
+  delay(500);
+  postclient.post("supply_voltage", v_supply);
+  delay(500);
+  postclient.post("pv_voltage", v_pv);
+  delay(500);
+  postclient.post("battery_min_voltage", v_batt);
+  delay(500);
 }
 
 /*
