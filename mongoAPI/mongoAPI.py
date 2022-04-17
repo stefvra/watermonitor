@@ -18,7 +18,12 @@ def add():
     app.logger.info("post request received")
     try:
         app.logger.info(request.data)
-        data = json.loads(request.data)
+        payload = json.loads(request.data)
+        if 'collection' in payload:
+            collection = payload['collection']
+        else:
+            collection = 'test'
+        data = payload['data']
         data['date'] = datetime.datetime.now()
         app.logger.info(data)
         client[database][collection].insert_one(data)
