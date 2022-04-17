@@ -21,10 +21,10 @@ The range readings are in units of mm. */
 
 DistanceSensor distanceSensor;
 VoltageSensor InputVoltageSensor = VoltageSensor(32);
-VoltageSensor SupplyVoltageSensor = VoltageSensor(33);
+VoltageSensor SupplyVoltageSensor = VoltageSensor(34);
 VoltageSensor PVVoltageSensor = VoltageSensor(35);
-VoltageSensor BatteryVoltageSensor = VoltageSensor(34);
-PostClient postclient = PostClient(SERVER_IP, "add", SERVER_PORT);
+VoltageSensor USBVoltageSensor = VoltageSensor(34);
+PostClient postclient = PostClient(SERVER_IP, "add", COLLECTION, SERVER_PORT);
 
 int d, v_in, v_supply, v_pv, v_batt;
 //SFE_BMP180 pressure;
@@ -43,7 +43,7 @@ void setup() {
   InputVoltageSensor.init();
   SupplyVoltageSensor.init();
   PVVoltageSensor.init();
-  BatteryVoltageSensor.init();
+  USBVoltageSensor.init();
 
 
 
@@ -119,7 +119,7 @@ void loop() {
   v_in = InputVoltageSensor.measure();
   v_supply = SupplyVoltageSensor.measure();
   v_pv = PVVoltageSensor.measure();
-  v_batt = BatteryVoltageSensor.measure();
+  v_batt = USBVoltageSensor.measure();
   postclient.post("distance", d);
   delay(500);
   postclient.post("input_voltage", v_in);
@@ -128,7 +128,7 @@ void loop() {
   delay(500);
   postclient.post("pv_voltage", v_pv);
   delay(500);
-  postclient.post("battery_min_voltage", v_batt);
+  postclient.post("usb_voltage", v_batt);
   delay(500);
 }
 
