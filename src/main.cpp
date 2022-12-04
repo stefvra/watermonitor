@@ -7,83 +7,90 @@ The range readings are in units of mm. */
 
 
 #include <Wire.h>
-//#include <WiFi.h>
-//#include <WebServer.h>
-//#include <SFE_BMP180.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <string>
+
 #include "secrets.h"
 #include "sensor.h"
-#include "client.h"
+
 
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  60        /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  864000   /* Time ESP32 will go to sleep (in seconds) */
 
 
 
-DistanceSensor distanceSensor;
-VoltageSensor InputVoltageSensor = VoltageSensor(32);
-VoltageSensor SupplyVoltageSensor = VoltageSensor(34);
-VoltageSensor PVVoltageSensor = VoltageSensor(35);
-VoltageSensor USBVoltageSensor = VoltageSensor(34);
-PostClient postclient = PostClient(SERVER_IP, "add", COLLECTION, SERVER_PORT);
+WiFiClient espClient;
 
-int d, v_in, v_supply, v_pv, v_batt;
-//SFE_BMP180 pressure;
+PubSubClient client(espClient);
+std::string message;
 
-//void handle_root();
+DistanceSensor distancesensor;
+int d;
 
-//WebServer server(80); // Object of WebServer(HTTP port, 80 is defult)
+// VoltageSensor USBVoltageSensor = VoltageSensor(33);
+// SFE_BMP180 pressure;
+// int v_in, v_supply, v_pv, v_batt;
+
+
+void setup_wifi() {
+  delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(SSID);
+
+  WiFi.begin(SSID, WIFI_PWD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+}
+
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Attempt to connect
+    if (client.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
+      Serial.println("connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
+}
+
+
 
 
 void setup() {
+
   Serial.begin(9600);
   Serial.println("starting");
   Wire.begin();
 
-  distanceSensor.init();
-  InputVoltageSensor.init();
-  SupplyVoltageSensor.init();
-  PVVoltageSensor.init();
-  USBVoltageSensor.init();
+  setup_wifi();
+  client.setServer(MQTT_IP, MQTT_PORT);
 
-
-
-  // Connect to your wi-fi modem
-
-  WiFi.begin(_SSID, PWD);
-
-  // Check wi-fi is connected to wi-fi network
-  while (WiFi.status() != WL_CONNECTED) {
-  delay(500);
-  Serial.print(".");
-  }
   Serial.println("");
-  Serial.println("WiFi connected successfully");
-  Serial.print("Got IP: ");
-  Serial.println(WiFi.localIP()); //Show ESP32 IP on serial
-
-  /*
-  d = distanceSensor.measure();
-  v_in = InputVoltageSensor.measure();
-  v_supply = SupplyVoltageSensor.measure();
-  v_pv = PVVoltageSensor.measure();
-  v_batt = BatteryVoltageSensor.measure();
-  postclient.post("distance", d);
-  delay(500);
-  postclient.post("input_voltage", v_in);
-  delay(500);
-  postclient.post("supply_voltage", v_supply);
-  delay(500);
-  postclient.post("pv_voltage", v_pv);
-  delay(500);
-  postclient.post("battery_min_voltage", v_batt);
-  delay(500);
-  */
-  //Serial.flush(); 
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 
 
 
-  //esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  //esp_deep_sleep_start();
+
+  distancesensor.init();
+  //USBVoltageSensor.init();
+
+
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
 
   /*
@@ -115,21 +122,25 @@ void setup() {
 }
 
 void loop() {
-  d = distanceSensor.measure();
-  v_in = InputVoltageSensor.measure();
-  v_supply = SupplyVoltageSensor.measure();
-  v_pv = PVVoltageSensor.measure();
-  v_batt = USBVoltageSensor.measure();
-  postclient.post("distance", d);
-  delay(500);
-  postclient.post("input_voltage", v_in);
-  delay(500);
-  postclient.post("supply_voltage", v_supply);
-  delay(500);
-  postclient.post("pv_voltage", v_pv);
-  delay(500);
-  postclient.post("usb_voltage", v_batt);
-  delay(500);
+
+  d = distancesensor.measure();
+  // v_in = InputVoltageSensor.measure();
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  message = std::to_string(d);
+  Serial.println("starting publish");
+  client.publish("watermonitor", message.c_str());
+  Serial.println("stoping publish");
+
+  delay(1000);
+
+  // esp_deep_sleep_start();
+
+
 }
 
 /*
@@ -195,3 +206,6 @@ void handle_root() {
 
 }
 */
+
+
+
