@@ -8,3 +8,4 @@ supervisor.conf
 __pycache__/
 mongoAPI/sandbox/
 HW_design/
+certificates/

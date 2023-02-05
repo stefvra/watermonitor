@@ -6,206 +6,329 @@ vl53l0x_ContinuousRanging_Example.c from the VL53L0X API.
 The range readings are in units of mm. */
 
 
+// SENSOR non init need to be dealed with!!
+
+
+
 #include <Wire.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
 #include <string>
+#include <EEPROM.h>
 
+#include "soc/soc.h"
+#include "soc/rtc_cntl_reg.h"
 #include "secrets.h"
+#include "root_ca.h"
 #include "sensor.h"
 
 
-#define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  864000   /* Time ESP32 will go to sleep (in seconds) */
+#define GSM // GSM or WIFI
 
 
 
-WiFiClient espClient;
 
-PubSubClient client(espClient);
+#define uS_TO_S_FACTOR 1000000L  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP  30   /* Time ESP32 will go to sleep (in seconds) */
+#define EEPROM_SIZE 12
+#define MAX_MQTT_RETRIES 5
+
+// mqtt definitions
+#define TOPIC "watermonitor/distance_test"
+std::string V1_NAME = "distance";
+std::string V2_NAME = "vbat";
+std::string V3_NAME = "temperature";
+
+// gpio definitions
+#define VBAT_PIN 14 
+#define LED_PIN 19   
+
+#ifdef GSM
+  #define TINY_GSM_MODEM_SIM800
+  #include <TinyGsmClient.h>
+  #define SerialAT Serial2
+  #define SIM800_PIN 12   
+  #define CONNECTION_TIMEOUT 25000L // time in ms to try getting network connection
+
+  // debugging option
+  // #define DUMP_AT_COMMANDS
+  #ifdef DUMP_AT_COMMANDS
+    #include <StreamDebugger.h>
+    StreamDebugger debugger(SerialAT, Serial);
+    TinyGsm        modem(debugger);
+  #else
+    TinyGsm        modem(SerialAT);
+  #endif
+  
+  TinyGsmClient client(modem);
+#else
+  WiFiClient client; // secure client to be implemented
+  #define MAX_WIFI_RETRIES 20
+#endif
+
+PubSubClient mqtt(client);
+
+
+bool online;
 std::string message;
-
 DistanceSensor distancesensor;
 int d;
+BMPSensor temperaturesensor;
+double temp = 0;
+float vbat = 0;
+const float VBAT_SCALE = 2 * 3.3 / 4095 * 4.81 / 4.72;
 
-// VoltageSensor USBVoltageSensor = VoltageSensor(33);
-// SFE_BMP180 pressure;
-// int v_in, v_supply, v_pv, v_batt;
 
+#ifdef WIFI
+  bool setup_wifi() {
+    delay(10);
+    // We start by connecting to a WiFi network
+    Serial.println();
+    Serial.print("Connecting to ");
+    Serial.println(SSID);
 
-void setup_wifi() {
-  delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(SSID);
+    WiFi.begin(SSID, WIFI_PWD);
 
-  WiFi.begin(SSID, WIFI_PWD);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+    int wifi_retries = 0;
+    while (wifi_retries < MAX_WIFI_RETRIES) {
+      wifi_retries++;
+      if (WiFi.status() == WL_CONNECTED)
+        {
+          Serial.println("");
+          Serial.println("WiFi connected");
+          Serial.println("IP address: ");
+          Serial.println(WiFi.localIP());
+          // client.setCACert(root_ca); // secure client to be implemented
+          return true;
+        }
+      delay(500);
+      Serial.print(".");
+    }
+    return false;
   }
-}
+#endif
+
+#ifdef GSM
+  bool setup_gsm() {
+
+    Serial.println("Starting modem connection...");
+    // Set GSM module baud rate
+    SerialAT.begin(115200);
+    modem.setBaud(115200);
+    delay(500);
+
+    // Restart takes quite some time
+    // To skip it, call init() instead of restart()
+    Serial.println("Initializing modem...");
+    modem.init();
 
 
-void reconnect() {
+    String modemInfo = modem.getModemInfo();
+    Serial.print("Modem Info: ");
+    Serial.println(modemInfo);
+
+
+    if (SIM_PIN && modem.getSimStatus() != 3) { modem.simUnlock(SIM_PIN); }
+
+    Serial.print("Waiting for network...");
+    if (!modem.waitForNetwork(CONNECTION_TIMEOUT)) {
+      Serial.println(" fail");
+      return false;
+    }
+    Serial.println(" success");
+
+    Serial.print(F("Connecting to "));
+    Serial.print(APN);
+    if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+      Serial.println(" fail");
+      return false;
+    }
+    Serial.println(" success");
+
+    if (modem.isGprsConnected()) { Serial.println("GPRS connected"); }
+
+    Serial.print("signal quality (0-30): ");
+    Serial.print(modem.getSignalQuality());
+    Serial.println();
+    
+    return true;
+
+
+  }
+#endif
+
+
+bool setup_mqtt() {
+
+
+  mqtt.setServer(MQTT_IP, MQTT_PORT);
+
   // Loop until we're reconnected
-  while (!client.connected()) {
+  int mqtt_retries = 0;
+  while (mqtt_retries < MAX_MQTT_RETRIES) {
+    mqtt_retries++;
     Serial.print("Attempting MQTT connection...");
     // Attempt to connect
-    if (client.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
+    if (mqtt.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
       Serial.println("connected");
+      mqtt.loop();  
+      return true;
     } else {
       Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
+      Serial.print(mqtt.state());
+      Serial.println(" try again in 3 seconds");
       // Wait 5 seconds before retrying
-      delay(5000);
+      delay(3000);
     }
+  }
+  return false;
+}
+
+int get_consecutive_false_startups() {
+  // get amount of times that esp was started up not due to wakeup from deep sleep
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  EEPROM.begin(EEPROM_SIZE);
+  int address = 0;
+  int faulty_startups = EEPROM.read(address);
+
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
+    // correct wakeup.
+    faulty_startups = 0;
+  } else {
+    // false startup, trying again
+    faulty_startups++;
+  };
+
+  EEPROM.write(address, faulty_startups);
+  EEPROM.commit();
+  return faulty_startups;
+
+}
+
+
+void print_wakeup_reason(){
+  esp_sleep_wakeup_cause_t wakeup_reason;
+
+  wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  switch(wakeup_reason)
+  {
+    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
+    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
   }
 }
 
+
+void start_deep_sleep() {
+  #ifdef GSM
+    Serial.println("Turning off SIM module...");
+    digitalWrite(SIM800_PIN, HIGH);
+  #endif
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  Serial.println("deep sleep mode set, sleeping...");
+  delay(100);
+  esp_deep_sleep_start();
+}
 
 
 
 void setup() {
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0); //disable brownout detector
 
+  // at startup system is not online
+  online = false;
+  
+  // set control led
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH);
+
+  // start serial output
   Serial.begin(9600);
+  delay(10);
   Serial.println("starting");
+
+  print_wakeup_reason();
+  Serial.print("consecutive false startups: ");
+  Serial.println(get_consecutive_false_startups());
+
+
+  // startup I2C communication
   Wire.begin();
 
-  setup_wifi();
-  client.setServer(MQTT_IP, MQTT_PORT);
-
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
-
-
-
-
-  distancesensor.init();
-  //USBVoltageSensor.init();
-
-
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-
-
-  /*
+  // stetup mqtt connection
+  #ifdef GSM
+    // switch on sim module
+    pinMode(SIM800_PIN, OUTPUT);
+    digitalWrite(SIM800_PIN, HIGH);
+    if (setup_gsm()) {
+      if (setup_mqtt()) {
+        online = true;
+      };
+    };
+  #else
+    if (setup_wifi()) {
+      if (setup_mqtt()) {
+        online = true;
+      };
+    };
+  #endif
 
 
-  // BMP180 sensor
-  if (pressure.begin())
-  Serial.println("BMP180 init success");
-  else
-  {
-  // Oops, something went wrong, this is usually a connection problem,
-  // see the comments at the top of this sketch for the proper connections.
-
-  Serial.println("BMP180 init fail\n\n");
-  while(1); // Pause forever.
+  if (!online) {
+    Serial.println("was not able to go in online mode.");
+    start_deep_sleep();
   }
 
-  Serial.println("Try Connecting to ");
-  Serial.println(SSID);
+
+  // perform measurements
+  if (distancesensor.init()) {
+    d = distancesensor.measure();
+  } else {
+    d = 0;
+  }
+
+  if (temperaturesensor.init()) {
+    d = temperaturesensor.measure();
+  } else {
+    d = 0;
+  }
+
+  vbat = analogRead(VBAT_PIN) * VBAT_SCALE;
 
 
+  
 
-  server.on("/", handle_root);
-  server.begin();
-  Serial.println("HTTP server started");
+  Serial.println("starting publish");
+  message = "{ \"" + V1_NAME + "\": " + std::to_string(d) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  Serial.println("stopping publish...");
+  
+  // delay to finish mqtt publishing. Not ideal, in some cases last messages are not published.
+  delay(1000);
 
-  delay(100);
-  */
+  start_deep_sleep();
+
+  
+
+
 }
 
 void loop() {
 
-  d = distancesensor.measure();
-  // v_in = InputVoltageSensor.measure();
-
-  if (!client.connected()) {
-    reconnect();
-  }
-  client.loop();
-
-  message = std::to_string(d);
-  Serial.println("starting publish");
-  client.publish("watermonitor", message.c_str());
-  Serial.println("stoping publish");
-
-  delay(1000);
-
-  // esp_deep_sleep_start();
-
 
 }
-
-/*
-// Handle root url (/)
-void handle_root() {
-  Serial.println("request received...");
-
-
-  delay(300);
-
-  // pressure and temp readings
-  char status;
-  double T,P,p0,a;
-
-  status = pressure.startTemperature();
-  if (status != 0)
-  {
-  // Wait for the measurement to complete:
-  delay(status);
-  // Retrieve the completed temperature measurement:
-  // Note that the measurement is stored in the variable T.
-  // Function returns 1 if successful, 0 if failure.
-  status = pressure.getTemperature(T);
-  if (status != 0)
-  {
-  // Print out the measurement:
-  Serial.print("temperature: ");
-  Serial.print(T,2);
-  Serial.print(" deg C, ");
-
-  // Start a pressure measurement:
-  // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
-  // If request is successful, the number of ms to wait is returned.
-  // If request is unsuccessful, 0 is returned.
-
-  status = pressure.startPressure(3);
-  if (status != 0)
-  {
-  // Wait for the measurement to complete:
-  delay(status);
-
-  // Retrieve the completed pressure measurement:
-  // Note that the measurement is stored in the variable P.
-  // Note also that the function requires the previous temperature measurement (T).
-  // (If temperature is stable, you can do one temperature measurement for a number of pressure measurements.)
-  // Function returns 1 if successful, 0 if failure.
-
-  status = pressure.getPressure(P,T);
-  if (status != 0)
-  {
-  // Print out the measurement:
-  Serial.print("pressure: ");
-  Serial.print(P,2);
-  Serial.println(" mb, ");
-  }
-  else Serial.println("error retrieving pressure measurement\n");
-  }
-  else Serial.println("error starting pressure measurement\n");
-  }
-  else Serial.println("error retrieving temperature measurement\n");
-  }
-  else Serial.println("error starting temperature measurement\n");
-
-}
-*/
-
-
 

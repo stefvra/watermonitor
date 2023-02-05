@@ -9,7 +9,7 @@ class Sensor {
     private:
     public:
     virtual int measure() = 0;
-    virtual void init() = 0;
+    virtual bool init() = 0;
 };
 
 
@@ -20,7 +20,7 @@ class DistanceSensor : public Sensor {
     DistanceSensor();
     ~DistanceSensor();
     int measure();
-    void init();
+    bool init();
 };
 
 
@@ -31,5 +31,16 @@ class VoltageSensor : public Sensor {
     VoltageSensor();
     VoltageSensor(int _pin);
     int measure();
-    void init();
+    bool init();
+};
+
+class BMPSensor : public Sensor {
+    private:
+    SFE_BMP180 *sensor;
+    public:
+    BMPSensor();
+    ~BMPSensor();
+    int measure();
+    double measure_temp();
+    bool init();
 };
