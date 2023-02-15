@@ -33,6 +33,7 @@ The range readings are in units of mm. */
 #define TIME_TO_SLEEP  30   /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
 #define MAX_MQTT_RETRIES 5
+#define NR_MEASUREMENTS 3 /* amount of measurements to perform */
 
 // mqtt definitions
 #define TOPIC "watermonitor/distance_test"
@@ -121,7 +122,10 @@ const float VBAT_SCALE = 2 * 3.3 / 4095 * 4.81 / 4.72;
     // Restart takes quite some time
     // To skip it, call init() instead of restart()
     Serial.println("Initializing modem...");
-    modem.init();
+    if (!modem.init()) {
+      Serial.println(" fail");
+      return false;      
+    };
 
 
     String modemInfo = modem.getModemInfo();
@@ -288,37 +292,40 @@ void setup() {
 
 
   // perform measurements
-  if (distancesensor.init()) {
-    d = distancesensor.measure();
-  } else {
-    d = 0;
+
+  for (int i = 0; i < NR_MEASUREMENTS; i++) {
+    if (distancesensor.init()) {
+      d = distancesensor.measure();
+    } else {
+      d = 0;
+    }
+
+    if (temperaturesensor.init()) {
+      temp = temperaturesensor.measure_temp();
+    } else {
+      temp = 0;
+    }
+
+    vbat = analogRead(VBAT_PIN) * VBAT_SCALE;
+
+
+    
+
+    Serial.println("starting publish");
+    message = "{ \"" + V1_NAME + "\": " + std::to_string(d) + "}";
+    Serial.println(message.c_str());
+    mqtt.publish(TOPIC, message.c_str());
+    message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
+    Serial.println(message.c_str());
+    mqtt.publish(TOPIC, message.c_str());
+    message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
+    Serial.println(message.c_str());
+    mqtt.publish(TOPIC, message.c_str());
+    Serial.println("stopping publish...");
   }
-
-  if (temperaturesensor.init()) {
-    d = temperaturesensor.measure();
-  } else {
-    d = 0;
-  }
-
-  vbat = analogRead(VBAT_PIN) * VBAT_SCALE;
-
-
-  
-
-  Serial.println("starting publish");
-  message = "{ \"" + V1_NAME + "\": " + std::to_string(d) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  Serial.println("stopping publish...");
   
   // delay to finish mqtt publishing. Not ideal, in some cases last messages are not published.
-  delay(1000);
+  delay(1000 * NR_MEASUREMENTS);
 
   start_deep_sleep();
 
