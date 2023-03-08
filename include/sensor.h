@@ -8,39 +8,68 @@
 class Sensor {
     private:
     public:
-    virtual int measure() = 0;
-    virtual bool init() = 0;
+        virtual float measure() = 0;
+        virtual bool init() = 0;
+};
+
+
+class Decorator : public Sensor {
+    protected:
+        Sensor* sensor;
+    public:
+        bool init();
+        void set_sensor(Sensor*);
+};
+
+class SensorValidator : public Decorator {
+    private:
+        int max_retries;
+        int lower_limit;
+        int upper_limit;
+    public:
+        ~SensorValidator();
+        SensorValidator(Sensor* _sensor, int _max_retries, int _lower_limit, int _upper_limit);
+        float measure();
+};
+
+class SensorScaler : public Decorator {
+    private:
+        int scale;
+        int offset;
+    public:
+        ~SensorScaler();
+        SensorScaler(Sensor* _sensor, int _scale, int _offset);
+        float measure();
 };
 
 
 class DistanceSensor : public Sensor {
     private:
-    VL53L0X *sensor;
+        VL53L0X *sensor;
     public:
-    DistanceSensor();
-    ~DistanceSensor();
-    int measure();
-    bool init();
+        DistanceSensor();
+        ~DistanceSensor();
+        float measure();
+        bool init();
 };
 
 
 class VoltageSensor : public Sensor {
     private:
-    int pin = 33;
+        int pin = 33;
     public:
-    VoltageSensor();
-    VoltageSensor(int _pin);
-    int measure();
-    bool init();
+        VoltageSensor();
+        VoltageSensor(int _pin);
+        float measure();
+        bool init();
 };
 
 class BMPSensor : public Sensor {
     private:
-    SFE_BMP180 *sensor;
+        SFE_BMP180 *sensor;
     public:
-    BMPSensor();
-    ~BMPSensor();
-    int measure();
-    double measure_temp();
-    bool init();
+        BMPSensor();
+        ~BMPSensor();
+        float measure();
+        bool init();
 };

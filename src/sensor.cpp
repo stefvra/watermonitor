@@ -1,14 +1,74 @@
 #include "sensor.h"
 
 
+
+bool Decorator::init() {
+  return sensor->init();
+};
+
+void Decorator::set_sensor(Sensor* _sensor) {
+  sensor = _sensor;
+};
+
+
+SensorValidator::SensorValidator(Sensor* _sensor, int _max_retries, int _lower_limit, int _upper_limit) :
+  max_retries{_max_retries},
+  lower_limit{_lower_limit},
+  upper_limit{_upper_limit}
+  {set_sensor(_sensor);};
+
+SensorValidator::~SensorValidator() {};
+
+
+float SensorValidator::measure() {
+
+  // implement measurement of a sensor. tries maximum max_retries
+  // first value within limits is returned
+  bool valid_measurement = false;
+  int retries = 0;
+  float result;
+
+  while (valid_measurement == false and retries < max_retries) {
+    result = measure();
+    retries++;
+    if (result < upper_limit and result > lower_limit) {
+      valid_measurement = true;
+    }
+  };
+
+  if (valid_measurement) {
+    return result;
+  } else {
+    return 0;
+  };
+}
+
+
+SensorScaler::SensorScaler(Sensor* _sensor, int _scale, int _offset) :
+  scale{_scale},
+  offset{_offset}
+  {set_sensor(_sensor);};
+
+SensorScaler::~SensorScaler() {};
+
+float SensorScaler::measure() {
+
+  // implement measurement of a sensor. tries maximum max_retries
+  // first value within limits is returned
+  return offset + scale * measure();
+}
+
+
+
+
 DistanceSensor::DistanceSensor() {
     sensor = new VL53L0X();
-}
+};
 
 
 DistanceSensor::~DistanceSensor() {
     delete sensor;
-}
+};
 
 
 bool DistanceSensor::init() {
@@ -32,7 +92,7 @@ bool DistanceSensor::init() {
 
 
 
-int DistanceSensor::measure() {
+float DistanceSensor::measure() {
 
   int D;
   D = sensor->readRangeSingleMillimeters();
@@ -43,7 +103,7 @@ int DistanceSensor::measure() {
   Serial.print(D);
   Serial.println(" mm");
   }
-  return D;
+  return (float) D;
 }
 
 
@@ -65,11 +125,11 @@ bool VoltageSensor::init() {
 
 
 
-int VoltageSensor::measure() {
+float VoltageSensor::measure() {
 
   int D;
   D = analogRead(pin);
-  return D;
+  return (float) D;
 }
 
 
@@ -103,12 +163,7 @@ bool BMPSensor::init() {
 }
 
 
-int BMPSensor::measure() {
-  return 0;
-}
-
-
-double BMPSensor::measure_temp() {
+float BMPSensor::measure() {
 
   char status;
   double T,P,p0,a;
@@ -125,7 +180,7 @@ double BMPSensor::measure_temp() {
   if (status != 0)
   {
   // Print out the measurement:
-  return T;
+  return (float) T;
   Serial.print("temperature: ");
   Serial.print(T,2);
   Serial.print(" deg C, ");

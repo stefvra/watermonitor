@@ -73,23 +73,19 @@ PubSubClient mqtt(client);
 
 bool online;
 std::string message;
-DistanceSensor distancesensor;
-BMPSensor temperaturesensor;
 
-int distance;
-const int distance_scale = 1;
-const int distance_limits[2] = {10, 2000};
-const int distance_retries = 5;
+float distance;
+DistanceSensor _distancesensor;
+SensorValidator distancesensor(&_distancesensor, 5, 10, 2000);
 
-float temp = 0;
-const float temp_scale = 1;
-const float temp_limits[2] = {-10, 50};
-const int temp_retries = 5;
+float temp;
+BMPSensor _temperaturesensor;
+SensorValidator temperaturesensor(&_temperaturesensor, 5, -10, 50);
 
 float vbat = 0;
-const float vbat_scale = 2 * 3.3 / 4095 * 4.81 / 4.72;
-const float vbat_limits[2] = {3, 5};
-const int vbat_retries = 5;
+VoltageSensor __vbatsensor;
+SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0);
+SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
 
 
 #ifdef WIFI
@@ -256,32 +252,6 @@ void start_deep_sleep() {
 
 
 
-template<typename T>
-T measure(T (*measure)(), T scale, T& limits, int max_retries) {
-  // implement measurement of a sensor. tries maximum max_retries
-  // first value within limits is returned
-  bool valid_measurement = false;
-  int retries = 0;
-  T result;
-
-  while (valid_measurement == false and retries < max_retries) {
-    result = measure();
-    retries++;
-    if (result < limits[0] and result > limits[1]) {
-      valid_measurement = true;
-    }
-
-  }
-
-  if (valid_measurement) {
-    return result;
-  } else {
-    return NULL
-  }
-
-}
-
-
 
 
 void setup() {
@@ -333,41 +303,25 @@ void setup() {
 
 
   // perform measurements
-
-  // T measure(T (*measure)(), T scale, T& limits, int max_retries) {
-  distance = measure(distancesensor.measure, distance_scale, distance_limits, distance_retries);
-
-
-  for (int i = 0; i < NR_MEASUREMENTS; i++) {
-    if (distancesensor.init()) {
-      distance = distancesensor.measure();
-    } else {
-      distance = 0;
-    }
-
-    if (temperaturesensor.init()) {
-      temp = temperaturesensor.measure_temp();
-    } else {
-      temp = 0;
-    }
-
-    vbat = analogRead(VBAT_PIN) * vbat_scale;
+  distance = distancesensor.measure();
+  temp = temperaturesensor.measure();
+  vbat = vbatsensor.measure();
 
 
     
 
-    Serial.println("starting publish");
-    message = "{ \"" + V1_NAME + "\": " + std::to_string(distance) + "}";
-    Serial.println(message.c_str());
-    mqtt.publish(TOPIC, message.c_str());
-    message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
-    Serial.println(message.c_str());
-    mqtt.publish(TOPIC, message.c_str());
-    message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
-    Serial.println(message.c_str());
-    mqtt.publish(TOPIC, message.c_str());
-    Serial.println("stopping publish...");
-  }
+  Serial.println("starting publish");
+  message = "{ \"" + V1_NAME + "\": " + std::to_string(distance) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
+  Serial.println(message.c_str());
+  mqtt.publish(TOPIC, message.c_str());
+  Serial.println("stopping publish...");
+
   
   // delay to finish mqtt publishing. Not ideal, in some cases last messages are not published.
   delay(1000 * NR_MEASUREMENTS);
