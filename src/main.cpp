@@ -6,9 +6,6 @@ vl53l0x_ContinuousRanging_Example.c from the VL53L0X API.
 The range readings are in units of mm. */
 
 
-// SENSOR non init need to be dealed with!!
-
-
 
 #include <Wire.h>
 #include <WiFi.h>
@@ -30,7 +27,7 @@ The range readings are in units of mm. */
 
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  30 //3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
 #define MAX_MQTT_RETRIES 5
 #define NR_MEASUREMENTS 3 /* amount of measurements to perform */
@@ -75,17 +72,24 @@ bool online;
 std::string message;
 
 float distance;
-DistanceSensor _distancesensor;
+DistanceSensor __distancesensor;
+SensorInitializer _distancesensor(&__distancesensor);
 SensorValidator distancesensor(&_distancesensor, 5, 10, 2000);
 
+
+
 float temp;
-BMPSensor _temperaturesensor;
+BMPSensor __temperaturesensor;
+SensorInitializer _temperaturesensor(&__temperaturesensor);
 SensorValidator temperaturesensor(&_temperaturesensor, 5, -10, 50);
 
+
 float vbat = 0;
-VoltageSensor __vbatsensor;
+VoltageSensor ___vbatsensor;
+SensorInitializer __vbatsensor(&___vbatsensor);
 SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0);
 SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
+
 
 
 #ifdef WIFI
@@ -303,11 +307,12 @@ void setup() {
 
 
   // perform measurements
+  Serial.println("Starting distance measurement...");
   distance = distancesensor.measure();
+  Serial.println("Starting temperature measurement...");
   temp = temperaturesensor.measure();
+  Serial.println("Starting vbat measurement...");
   vbat = vbatsensor.measure();
-
-
     
 
   Serial.println("starting publish");

@@ -29,7 +29,11 @@ float SensorValidator::measure() {
   float result;
 
   while (valid_measurement == false and retries < max_retries) {
-    result = measure();
+    Serial.print("starting measurement ");
+    Serial.println(retries);
+    result = sensor->measure();
+    Serial.print("result:  ");
+    Serial.println(result);
     retries++;
     if (result < upper_limit and result > lower_limit) {
       valid_measurement = true;
@@ -37,9 +41,10 @@ float SensorValidator::measure() {
   };
 
   if (valid_measurement) {
+    Serial.println("Valid measurement");
     return result;
   } else {
-    return 0;
+    return FAULTY_MEASUREMENT;
   };
 }
 
@@ -55,8 +60,27 @@ float SensorScaler::measure() {
 
   // implement measurement of a sensor. tries maximum max_retries
   // first value within limits is returned
-  return offset + scale * measure();
+  return offset + scale * sensor->measure();
 }
+
+
+SensorInitializer::SensorInitializer(Sensor* _sensor)
+  {set_sensor(_sensor);};
+
+SensorInitializer::~SensorInitializer() {};
+
+float SensorInitializer::measure() {
+
+
+  if (sensor->init()) {
+    return sensor->measure();
+  } else {
+    return FAULTY_MEASUREMENT;
+  };
+
+}
+
+
 
 
 
@@ -76,7 +100,7 @@ bool DistanceSensor::init() {
   sensor->setTimeout(500);
   if (!sensor->init())
   {
-    Serial.println("Failed to detect and initialize sensor!");
+    Serial.println("Failed to initialize distance sensor!");
     return false;
   } else {
     // setup for long range mode
@@ -98,6 +122,7 @@ float DistanceSensor::measure() {
   D = sensor->readRangeSingleMillimeters();
   if (sensor->timeoutOccurred()){
   Serial.println("Distance sensor TIMEOUT");
+  return FAULTY_MEASUREMENT;
   } else {
   Serial.print("distance: ");
   Serial.print(D);
@@ -155,7 +180,7 @@ bool BMPSensor::init() {
   } else {
   // Oops, something went wrong, this is usually a connection problem,
   // see the comments at the top of this sketch for the proper connections.
-    Serial.println("BMP180 init fail\n\n");
+    Serial.println("BMP180 init fail");
     return false;
   }
 
@@ -212,5 +237,6 @@ float BMPSensor::measure() {
   }
   }
   }
-  }
+  };
+  return FAULTY_MEASUREMENT;
 }

@@ -2,7 +2,10 @@
 #include <Arduino.h>
 #include <VL53L0X.h>
 #include <SFE_BMP180.h>
+#include <float.h>
 
+
+#define FAULTY_MEASUREMENT FLT_MAX
 
 
 class Sensor {
@@ -41,6 +44,15 @@ class SensorScaler : public Decorator {
         SensorScaler(Sensor* _sensor, int _scale, int _offset);
         float measure();
 };
+
+class SensorInitializer : public Decorator {
+    private:
+    public:
+        ~SensorInitializer();
+        SensorInitializer(Sensor* _sensor);
+        float measure();
+};
+
 
 
 class DistanceSensor : public Sensor {
