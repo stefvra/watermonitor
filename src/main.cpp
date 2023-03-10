@@ -71,21 +71,21 @@ PubSubClient mqtt(client);
 bool online;
 std::string message;
 
-float distance;
+measurement distance;
 DistanceSensor __distancesensor;
 SensorInitializer _distancesensor(&__distancesensor);
 SensorValidator distancesensor(&_distancesensor, 5, 10, 2000);
 
 
 
-float temp;
+measurement temp;
 BMPSensor __temperaturesensor;
 SensorInitializer _temperaturesensor(&__temperaturesensor);
 SensorValidator temperaturesensor(&_temperaturesensor, 5, -10, 50);
 
 
-float vbat = 0;
-VoltageSensor ___vbatsensor;
+measurement vbat;
+VoltageSensor ___vbatsensor(VBAT_PIN);
 SensorInitializer __vbatsensor(&___vbatsensor);
 SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0);
 SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
@@ -250,11 +250,23 @@ void start_deep_sleep() {
   Serial.print("deep sleep mode set, sleeping for ");
   Serial.print(TIME_TO_SLEEP);
   Serial.println(" seconds...");
-  delay(100);
+  delay(300);
   esp_deep_sleep_start();
 }
 
 
+
+void publish_measurement(measurement result, std::string name) {
+  if (result.valid) {
+    Serial.println("starting publish");
+    message = "{ \"" + name + "\": " + std::to_string(result.value) + "}";
+    Serial.println(message.c_str());
+    mqtt.publish(TOPIC, message.c_str());
+  } else {
+    Serial.println("result not valid, not publishing");
+  }
+
+}
 
 
 
@@ -309,24 +321,14 @@ void setup() {
   // perform measurements
   Serial.println("Starting distance measurement...");
   distance = distancesensor.measure();
+  publish_measurement(distance, V1_NAME);
   Serial.println("Starting temperature measurement...");
   temp = temperaturesensor.measure();
+  publish_measurement(temp, V1_NAME);
   Serial.println("Starting vbat measurement...");
   vbat = vbatsensor.measure();
+  publish_measurement(vbat, V1_NAME);  
     
-
-  Serial.println("starting publish");
-  message = "{ \"" + V1_NAME + "\": " + std::to_string(distance) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  message = "{ \"" + V2_NAME + "\": " + std::to_string(vbat) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  message = "{ \"" + V3_NAME + "\": " + std::to_string(temp) + "}";
-  Serial.println(message.c_str());
-  mqtt.publish(TOPIC, message.c_str());
-  Serial.println("stopping publish...");
-
   
   // delay to finish mqtt publishing. Not ideal, in some cases last messages are not published.
   delay(1000 * NR_MEASUREMENTS);

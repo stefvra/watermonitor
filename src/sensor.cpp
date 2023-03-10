@@ -1,6 +1,9 @@
 #include "sensor.h"
 
 
+measurement faulty_measurement = FAULTY_MEASUREMENT_INITIALIZER;
+
+
 
 bool Decorator::init() {
   return sensor->init();
@@ -11,7 +14,7 @@ void Decorator::set_sensor(Sensor* _sensor) {
 };
 
 
-SensorValidator::SensorValidator(Sensor* _sensor, int _max_retries, int _lower_limit, int _upper_limit) :
+SensorValidator::SensorValidator(Sensor* _sensor, int _max_retries, float _lower_limit, float _upper_limit) :
   max_retries{_max_retries},
   lower_limit{_lower_limit},
   upper_limit{_upper_limit}
@@ -20,23 +23,23 @@ SensorValidator::SensorValidator(Sensor* _sensor, int _max_retries, int _lower_l
 SensorValidator::~SensorValidator() {};
 
 
-float SensorValidator::measure() {
+measurement SensorValidator::measure() {
 
   // implement measurement of a sensor. tries maximum max_retries
   // first value within limits is returned
   bool valid_measurement = false;
   int retries = 0;
-  float result;
+  measurement result;
 
   while (valid_measurement == false and retries < max_retries) {
     Serial.print("starting measurement ");
     Serial.println(retries);
     result = sensor->measure();
     Serial.print("result:  ");
-    Serial.println(result);
+    Serial.println(result.value);
     retries++;
-    if (result < upper_limit and result > lower_limit) {
-      valid_measurement = true;
+    if (result.value < upper_limit and result.value > lower_limit) {
+      valid_measurement = result.valid;
     }
   };
 
@@ -44,23 +47,27 @@ float SensorValidator::measure() {
     Serial.println("Valid measurement");
     return result;
   } else {
-    return FAULTY_MEASUREMENT;
+    result.valid = false;
+    return faulty_measurement;
   };
 }
 
 
-SensorScaler::SensorScaler(Sensor* _sensor, int _scale, int _offset) :
+SensorScaler::SensorScaler(Sensor* _sensor, float _scale, float _offset) :
   scale{_scale},
   offset{_offset}
   {set_sensor(_sensor);};
 
 SensorScaler::~SensorScaler() {};
 
-float SensorScaler::measure() {
+measurement SensorScaler::measure() {
 
   // implement measurement of a sensor. tries maximum max_retries
   // first value within limits is returned
-  return offset + scale * sensor->measure();
+  measurement result;
+  result = sensor->measure();
+  result.value = offset + scale * result.value;
+  return result;
 }
 
 
@@ -69,13 +76,12 @@ SensorInitializer::SensorInitializer(Sensor* _sensor)
 
 SensorInitializer::~SensorInitializer() {};
 
-float SensorInitializer::measure() {
-
+measurement SensorInitializer::measure() {
 
   if (sensor->init()) {
     return sensor->measure();
   } else {
-    return FAULTY_MEASUREMENT;
+    return faulty_measurement;
   };
 
 }
@@ -116,19 +122,22 @@ bool DistanceSensor::init() {
 
 
 
-float DistanceSensor::measure() {
+measurement DistanceSensor::measure() {
 
+  measurement result;
   int D;
   D = sensor->readRangeSingleMillimeters();
   if (sensor->timeoutOccurred()){
   Serial.println("Distance sensor TIMEOUT");
-  return FAULTY_MEASUREMENT;
+  return faulty_measurement;
   } else {
   Serial.print("distance: ");
   Serial.print(D);
   Serial.println(" mm");
   }
-  return (float) D;
+  result.value = (float) D;
+  result.valid = true;
+  return result;
 }
 
 
@@ -139,9 +148,6 @@ VoltageSensor::VoltageSensor(int _pin) {
   pin = _pin;
 }
 
-VoltageSensor::VoltageSensor() {}
-
-
 
 bool VoltageSensor::init() {
   pinMode(pin, INPUT);
@@ -150,11 +156,14 @@ bool VoltageSensor::init() {
 
 
 
-float VoltageSensor::measure() {
+measurement VoltageSensor::measure() {
 
+  measurement result;
   int D;
   D = analogRead(pin);
-  return (float) D;
+  result.value = (float) D;
+  result.valid = true;
+  return result;
 }
 
 
@@ -188,10 +197,11 @@ bool BMPSensor::init() {
 }
 
 
-float BMPSensor::measure() {
+measurement BMPSensor::measure() {
 
   char status;
   double T,P,p0,a;
+  measurement result;
 
   status = sensor->startTemperature();
   if (status != 0)
@@ -205,7 +215,9 @@ float BMPSensor::measure() {
   if (status != 0)
   {
   // Print out the measurement:
-  return (float) T;
+  result.value = (float) T;
+  result.valid = true;
+  return result;
   Serial.print("temperature: ");
   Serial.print(T,2);
   Serial.print(" deg C, ");
@@ -238,5 +250,5 @@ float BMPSensor::measure() {
   }
   }
   };
-  return FAULTY_MEASUREMENT;
+  return faulty_measurement;
 }

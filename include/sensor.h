@@ -6,12 +6,23 @@
 
 
 #define FAULTY_MEASUREMENT FLT_MAX
+#define FAULTY_MEASUREMENT_INITIALIZER { .value = 0, .valid = false}
+
+
+struct measurement {
+    float value;
+    bool valid;
+};
+
+
+// measurement faulty_measurement = { .value = 0, .valid = false};
+
 
 
 class Sensor {
     private:
     public:
-        virtual float measure() = 0;
+        virtual measurement measure() = 0;
         virtual bool init() = 0;
 };
 
@@ -27,22 +38,22 @@ class Decorator : public Sensor {
 class SensorValidator : public Decorator {
     private:
         int max_retries;
-        int lower_limit;
-        int upper_limit;
+        float lower_limit;
+        float upper_limit;
     public:
         ~SensorValidator();
-        SensorValidator(Sensor* _sensor, int _max_retries, int _lower_limit, int _upper_limit);
-        float measure();
+        SensorValidator(Sensor* _sensor, int _max_retries, float _lower_limit, float _upper_limit);
+        measurement measure();
 };
 
 class SensorScaler : public Decorator {
     private:
-        int scale;
-        int offset;
+        float scale;
+        float offset;
     public:
         ~SensorScaler();
-        SensorScaler(Sensor* _sensor, int _scale, int _offset);
-        float measure();
+        SensorScaler(Sensor* _sensor, float _scale, float _offset);
+        measurement measure();
 };
 
 class SensorInitializer : public Decorator {
@@ -50,7 +61,7 @@ class SensorInitializer : public Decorator {
     public:
         ~SensorInitializer();
         SensorInitializer(Sensor* _sensor);
-        float measure();
+        measurement measure();
 };
 
 
@@ -61,18 +72,17 @@ class DistanceSensor : public Sensor {
     public:
         DistanceSensor();
         ~DistanceSensor();
-        float measure();
+        measurement measure();
         bool init();
 };
 
 
 class VoltageSensor : public Sensor {
     private:
-        int pin = 33;
+        int pin;
     public:
-        VoltageSensor();
         VoltageSensor(int _pin);
-        float measure();
+        measurement measure();
         bool init();
 };
 
@@ -82,6 +92,6 @@ class BMPSensor : public Sensor {
     public:
         BMPSensor();
         ~BMPSensor();
-        float measure();
+        measurement measure();
         bool init();
 };
