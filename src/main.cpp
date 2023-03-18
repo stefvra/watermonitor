@@ -27,7 +27,7 @@ The range readings are in units of mm. */
 
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  30 //3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  1800ULL //3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
 #define MAX_MQTT_RETRIES 5
 #define NR_MEASUREMENTS 3 /* amount of measurements to perform */
@@ -324,10 +324,10 @@ void setup() {
   publish_measurement(distance, V1_NAME);
   Serial.println("Starting temperature measurement...");
   temp = temperaturesensor.measure();
-  publish_measurement(temp, V1_NAME);
+  publish_measurement(temp, V3_NAME);
   Serial.println("Starting vbat measurement...");
   vbat = vbatsensor.measure();
-  publish_measurement(vbat, V1_NAME);  
+  publish_measurement(vbat, V2_NAME);  
     
   
   // delay to finish mqtt publishing. Not ideal, in some cases last messages are not published.

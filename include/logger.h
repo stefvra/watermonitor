@@ -1,0 +1,66 @@
+#pragma once
+#include <Arduino.h>
+#include <PubSubClient.h>
+#include <Wire.h>
+#include <string>
+
+
+class LogEndpoint {
+    public:
+        virtual void log(std::string message) = 0;
+};
+
+class SerialLogEndpoint : public LogEndpoint {
+    public:
+        SerialLogEndpoint();
+        ~SerialLogEndpoint();
+        void log(std::string message);
+};
+
+class MQTTLogEndpoint : public LogEndpoint {
+    private:
+        PubSubClient* mqtt_client;
+        std::string topic;
+    public:
+        MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic);
+        ~MQTTLogEndpoint();
+        void log(std::string message);
+};
+
+
+
+class LogStrategy {
+    protected:
+        LogEndpoint* logendpoint;
+    public:
+        void set_logendpoint(LogEndpoint* logendpoint);
+        virtual void log(std::string message) = 0;
+        virtual void commit() = 0;
+};
+
+class EagerLogStrategy : public LogStrategy {
+    public:
+        EagerLogStrategy(LogEndpoint* logendpoint);
+        void log(std::string message);
+        void commit();        
+};
+
+class LazyLogStrategy : public LogStrategy  {
+    private:
+        std::string buffer;
+    public:
+        LazyLogStrategy(LogEndpoint* logendpoint);
+        void log(std::string message);
+        void commit();        
+};
+
+
+
+class Logger {
+    private:
+        LogStrategy* logstrategies;
+    public:
+        Logger(LogStrategy* logstrategies);
+        void log(std::string message);
+        void commit();
+};
