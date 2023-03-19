@@ -30,11 +30,14 @@ The range readings are in units of mm. */
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  1800ULL //3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
-#define MAX_MQTT_RETRIES 5
+#define MQTT_MAX_RETRIES 5
+#define MQTT_DELAY_AFTER_PUBLISH 5000 // should be large enough to send logging info
+#define MQTT_BUFFERSIZE 32 * 256 // 32 times normal size for logging purposes. too large messages anyway not possible to send
 #define NR_MEASUREMENTS 3 /* amount of measurements to perform */
 
 // mqtt definitions
 #define TOPIC "watermonitor/production"
+#define LOG_TOPIC "watermonitor/production/log"
 std::string V1_NAME = "distance";
 std::string V2_NAME = "vbat";
 std::string V3_NAME = "temperature";
@@ -91,11 +94,12 @@ SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
 
 
 
-MQTTLogEndpoint mqtt_logendpoint(&mqtt, std::string(TOPIC));
+MQTTLogEndpoint mqtt_logendpoint(&mqtt, std::string(LOG_TOPIC));
 LazyLogStrategy mqtt_logger(&mqtt_logendpoint);
 
 SerialLogEndpoint seriallogendpoint;
 EagerLogStrategy seriallogger(&seriallogendpoint);
+
 
 Logger logger;
 
@@ -104,9 +108,8 @@ Logger logger;
   bool setup_wifi() {
     delay(10);
     // We start by connecting to a WiFi network
-    Serial.println();
-    Serial.print("Connecting to ");
-    Serial.println(SSID);
+    logger.log("Connecting to ");
+    logger.log(SSID);
 
     WiFi.begin(SSID, WIFI_PWD);
 
@@ -115,10 +118,10 @@ Logger logger;
       wifi_retries++;
       if (WiFi.status() == WL_CONNECTED)
         {
-          Serial.println("");
-          Serial.println("WiFi connected");
-          Serial.println("IP address: ");
-          Serial.println(WiFi.localIP());
+          logger.log("");
+          logger.log("WiFi connected");
+          logger.log("IP address: ");
+          logger.log(WiFi.localIP());
           // client.setCACert(root_ca); // secure client to be implemented
           return true;
         }
@@ -132,7 +135,7 @@ Logger logger;
 #ifdef GSM
   bool setup_gsm() {
 
-    Serial.println("Starting modem connection...");
+    logger.log("Starting modem connection...");
     // Set GSM module baud rate
     SerialAT.begin(115200);
     modem.setBaud(115200);
@@ -140,40 +143,40 @@ Logger logger;
 
     // Restart takes quite some time
     // To skip it, call init() instead of restart()
-    Serial.println("Initializing modem...");
+    logger.log("Initializing modem...");
     if (!modem.init()) {
       Serial.println(" fail");
       return false;      
     };
 
 
-    String modemInfo = modem.getModemInfo();
-    Serial.print("Modem Info: ");
-    Serial.println(modemInfo);
+    char modemInfo_char[100];
+    modem.getModemInfo().toCharArray(modemInfo_char, 100);
+    logger.log("Modem Info: ");
+    logger.log(modemInfo_char);
 
 
     if (SIM_PIN && modem.getSimStatus() != 3) { modem.simUnlock(SIM_PIN); }
 
-    Serial.print("Waiting for network...");
+    logger.log("Waiting for network...");
     if (!modem.waitForNetwork(CONNECTION_TIMEOUT)) {
-      Serial.println(" fail");
+      logger.log(" fail");
       return false;
     }
-    Serial.println(" success");
+    logger.log(" success");
 
-    Serial.print(F("Connecting to "));
-    Serial.print(APN);
+    logger.log("Connecting to ");
+    logger.log(APN);
     if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
-      Serial.println(" fail");
+      logger.log(" fail");
       return false;
     }
-    Serial.println(" success");
+    logger.log(" success");
 
-    if (modem.isGprsConnected()) { Serial.println("GPRS connected"); }
+    if (modem.isGprsConnected()) { logger.log("GPRS connected"); }
 
-    Serial.print("signal quality (0-30): ");
-    Serial.print(modem.getSignalQuality());
-    Serial.println();
+    logger.log("signal quality (0-30): ");
+    logger.log(std::to_string(modem.getSignalQuality()));
     
     return true;
 
@@ -184,23 +187,23 @@ Logger logger;
 
 bool setup_mqtt() {
 
-
+  mqtt.setBufferSize(MQTT_BUFFERSIZE);
   mqtt.setServer(MQTT_IP, MQTT_PORT);
 
   // Loop until we're reconnected
   int mqtt_retries = 0;
-  while (mqtt_retries < MAX_MQTT_RETRIES) {
+  while (mqtt_retries < MQTT_MAX_RETRIES) {
     mqtt_retries++;
-    Serial.print("Attempting MQTT connection...");
+    logger.log("Attempting MQTT connection...");
     // Attempt to connect
     if (mqtt.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
-      Serial.println("connected");
+      logger.log("connected");
       mqtt.loop();  
       return true;
     } else {
-      Serial.print("failed, rc=");
-      Serial.print(mqtt.state());
-      Serial.println(" try again in 3 seconds");
+      logger.log("failed, rc=");
+      logger.log(std::to_string(mqtt.state()));
+      logger.log(" try again in 3 seconds");
       // Wait 5 seconds before retrying
       delay(3000);
     }
@@ -224,7 +227,6 @@ int get_consecutive_false_startups() {
     // false startup, trying again
     faulty_startups++;
   };
-
   EEPROM.write(address, faulty_startups);
   EEPROM.commit();
   return faulty_startups;
@@ -239,26 +241,31 @@ void print_wakeup_reason(){
 
   switch(wakeup_reason)
   {
-    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
-    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+    case ESP_SLEEP_WAKEUP_EXT0 : logger.log("Wakeup caused by external signal using RTC_IO"); break;
+    case ESP_SLEEP_WAKEUP_EXT1 : logger.log("Wakeup caused by external signal using RTC_CNTL"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : logger.log("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD : logger.log("Wakeup caused by touchpad"); break;
+    case ESP_SLEEP_WAKEUP_ULP : logger.log("Wakeup caused by ULP program"); break;
+    default : {
+      logger.log("Wakeup was not caused by deep sleep: ");
+      logger.log(std::to_string(wakeup_reason));
+      break;
+      }
   }
 }
 
 
 void start_deep_sleep() {
   #ifdef GSM
-    Serial.println("Turning off SIM module...");
+    logger.log("Turning off SIM module...");
     digitalWrite(SIM800_PIN, HIGH);
   #endif
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  Serial.print("deep sleep mode set, sleeping for ");
-  Serial.print(TIME_TO_SLEEP);
-  Serial.println(" seconds...");
-  delay(300);
+  logger.log("deep sleep mode set, sleeping for ");
+  logger.log(std::to_string(TIME_TO_SLEEP));
+  logger.log(" seconds...");
+  logger.commit();
+  delay(MQTT_DELAY_AFTER_PUBLISH); // time needed to finish mqtt publishing. Logging takes some time
   esp_deep_sleep_start();
 }
 
@@ -266,12 +273,12 @@ void start_deep_sleep() {
 
 void publish_measurement(measurement result, std::string name) {
   if (result.valid) {
-    Serial.println("starting publish");
+    logger.log("starting publish");
     message = "{ \"" + name + "\": " + std::to_string(result.value) + "}";
-    Serial.println(message.c_str());
+    logger.log(message.c_str());
     mqtt.publish(TOPIC, message.c_str());
   } else {
-    Serial.println("result not valid, not publishing");
+    logger.log("result not valid, not publishing");
   }
 
 }
@@ -283,25 +290,24 @@ void setup() {
 
   // at startup system is not online
   online = false;
-  
+
+
+  // start serial output
+  Serial.begin(9600);
+  delay(10);  // DO NOT REMOVE
+  Serial.println("starting");
+
   // setup loggers
   logger.add_logstrategy(&seriallogger);
   logger.add_logstrategy(&mqtt_logger);
-
-  logger.log("hello");
 
   // set control led
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);
 
-  // start serial output
-  Serial.begin(9600);
-  delay(10);
-  Serial.println("starting");
-
   print_wakeup_reason();
-  Serial.print("consecutive false startups: ");
-  Serial.println(get_consecutive_false_startups());
+  logger.log("consecutive false startups: ");
+  logger.log(std::to_string(get_consecutive_false_startups()));
 
 
   // startup I2C communication
@@ -327,19 +333,19 @@ void setup() {
 
 
   if (!online) {
-    Serial.println("was not able to go in online mode.");
+    logger.log("was not able to go in online mode.");
     start_deep_sleep();
   }
 
 
   // perform measurements
-  Serial.println("Starting distance measurement...");
+  logger.log("Starting distance measurement...");
   distance = distancesensor.measure();
   publish_measurement(distance, V1_NAME);
-  Serial.println("Starting temperature measurement...");
+  logger.log("Starting temperature measurement...");
   temp = temperaturesensor.measure();
   publish_measurement(temp, V3_NAME);
-  Serial.println("Starting vbat measurement...");
+  logger.log("Starting vbat measurement...");
   vbat = vbatsensor.measure();
   publish_measurement(vbat, V2_NAME);  
     

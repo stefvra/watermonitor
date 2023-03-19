@@ -3,10 +3,11 @@
 #include <VL53L0X.h>
 #include <SFE_BMP180.h>
 #include <float.h>
-
+#include "logger.h"
 
 #define FAULTY_MEASUREMENT FLT_MAX
 #define FAULTY_MEASUREMENT_INITIALIZER { .value = 0, .valid = false}
+
 
 
 struct measurement {

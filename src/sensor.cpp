@@ -32,11 +32,11 @@ measurement SensorValidator::measure() {
   measurement result;
 
   while (valid_measurement == false and retries < max_retries) {
-    Serial.print("starting measurement ");
-    Serial.println(retries);
+    logger.log("sm: "); // starting measurement
+    logger.log(std::to_string(retries));
     result = sensor->measure();
-    Serial.print("result:  ");
-    Serial.println(result.value);
+    logger.log("r:  "); // result
+    logger.log(std::to_string(result.value));
     retries++;
     if (result.value < upper_limit and result.value > lower_limit) {
       valid_measurement = result.valid;
@@ -44,7 +44,7 @@ measurement SensorValidator::measure() {
   };
 
   if (valid_measurement) {
-    Serial.println("Valid measurement");
+    logger.log("vm"); // valid measurement
     return result;
   } else {
     result.valid = false;
@@ -106,7 +106,7 @@ bool DistanceSensor::init() {
   sensor->setTimeout(500);
   if (!sensor->init())
   {
-    Serial.println("Failed to initialize distance sensor!");
+    logger.log("dist sens init F"); // fail to initialize
     return false;
   } else {
     // setup for long range mode
@@ -128,12 +128,12 @@ measurement DistanceSensor::measure() {
   int D;
   D = sensor->readRangeSingleMillimeters();
   if (sensor->timeoutOccurred()){
-  Serial.println("Distance sensor TIMEOUT");
+  logger.log("dist sens TO"); // distanse sensor timeout
   return faulty_measurement;
   } else {
-  Serial.print("distance: ");
-  Serial.print(D);
-  Serial.println(" mm");
+  logger.log("d: "); // distance
+  logger.log(std::to_string(D));
+  logger.log(" mm");
   }
   result.value = (float) D;
   result.valid = true;
@@ -184,12 +184,11 @@ bool BMPSensor::init() {
 
   // BMP180 sensor
   if (sensor->begin()) {
-    Serial.println("BMP180 init success");
     return true;
   } else {
   // Oops, something went wrong, this is usually a connection problem,
   // see the comments at the top of this sketch for the proper connections.
-    Serial.println("BMP180 init fail");
+    logger.log("BMP180 init f"); // sensor init failed
     return false;
   }
 
@@ -218,9 +217,9 @@ measurement BMPSensor::measure() {
   result.value = (float) T;
   result.valid = true;
   return result;
-  Serial.print("temperature: ");
-  Serial.print(T,2);
-  Serial.print(" deg C, ");
+  logger.log("t: "); // temperature
+  logger.log(std::to_string(T));
+  logger.log(" deg C, ");
 
   // Start a pressure measurement:
   // The parameter is the oversampling setting, from 0 to 3 (highest res, longest wait).
@@ -243,9 +242,9 @@ measurement BMPSensor::measure() {
   if (status != 0)
   {
   // Print out the measurement:
-  Serial.print("pressure: ");
-  Serial.print(P,2);
-  Serial.println(" mb, ");
+  logger.log("p: "); // pressure
+  logger.log(std::to_string(P));
+  logger.log(" mb, ");
   }
   }
   }

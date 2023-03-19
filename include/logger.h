@@ -68,3 +68,5 @@ class Logger {
         void log(std::string message);
         void commit();
 };
+
+extern Logger logger;

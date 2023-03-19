@@ -2,7 +2,9 @@
 
 
 
-SerialLogEndpoint::SerialLogEndpoint() {};
+SerialLogEndpoint::SerialLogEndpoint() {
+    delay(10);
+};
 
 SerialLogEndpoint::~SerialLogEndpoint() {};
 
@@ -44,7 +46,7 @@ LazyLogStrategy::LazyLogStrategy(LogEndpoint* _logendpoint) {
 }
 
 void LazyLogStrategy::log(std::string message) {
-    buffer += message + "\n";
+    buffer += message + " ";
 
 };
 
