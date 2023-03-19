@@ -19,6 +19,7 @@ The range readings are in units of mm. */
 #include "secrets.h"
 #include "root_ca.h"
 #include "sensor.h"
+#include "logger.h"
 
 
 #define GSM // GSM or WIFI
@@ -71,18 +72,16 @@ PubSubClient mqtt(client);
 bool online;
 std::string message;
 
+// define measurements
 measurement distance;
 DistanceSensor __distancesensor;
 SensorInitializer _distancesensor(&__distancesensor);
 SensorValidator distancesensor(&_distancesensor, 5, 10, 2000);
 
-
-
 measurement temp;
 BMPSensor __temperaturesensor;
 SensorInitializer _temperaturesensor(&__temperaturesensor);
 SensorValidator temperaturesensor(&_temperaturesensor, 5, -10, 50);
-
 
 measurement vbat;
 VoltageSensor ___vbatsensor(VBAT_PIN);
@@ -90,6 +89,15 @@ SensorInitializer __vbatsensor(&___vbatsensor);
 SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0);
 SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
 
+
+
+MQTTLogEndpoint mqtt_logendpoint(&mqtt, std::string(TOPIC));
+LazyLogStrategy mqtt_logger(&mqtt_logendpoint);
+
+SerialLogEndpoint seriallogendpoint;
+EagerLogStrategy seriallogger(&seriallogendpoint);
+
+Logger logger;
 
 
 #ifdef WIFI
@@ -276,6 +284,12 @@ void setup() {
   // at startup system is not online
   online = false;
   
+  // setup loggers
+  logger.add_logstrategy(&seriallogger);
+  logger.add_logstrategy(&mqtt_logger);
+
+  logger.log("hello");
+
   // set control led
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH);

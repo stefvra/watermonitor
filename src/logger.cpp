@@ -54,16 +54,36 @@ void LazyLogStrategy::commit() {
 
 
 
-Logger::Logger(LogStrategy* logstrategies) {
+Logger::Logger() {
+    logstrategies = new LogStrategy*[n_loggers_declared];
+    n_loggers_defined = 0;
+};
 
+Logger::~Logger() {
+    delete[] logstrategies;
+};
+
+
+void Logger::add_logstrategy(LogStrategy* logstrategy) {
+    if (n_loggers_defined < n_loggers_declared) {
+        logstrategies[n_loggers_defined] = logstrategy;
+        n_loggers_defined++;    
+    } else {
+        log(std::string("Too many loggers requested"));
+        commit();
+    }
 };
 
 void Logger::log(std::string message) {
-
+    for (int i = 0; i < n_loggers_defined; i++) {
+        logstrategies[i]->log(message);
+    }
 };
 
 void Logger::commit() {
-
+    for (int i = 0; i < n_loggers_defined; i++) {
+        logstrategies[i]->commit();
+    }
 };
 
 

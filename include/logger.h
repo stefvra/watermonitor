@@ -58,9 +58,13 @@ class LazyLogStrategy : public LogStrategy  {
 
 class Logger {
     private:
-        LogStrategy* logstrategies;
+        LogStrategy** logstrategies;
+        int n_loggers_defined;
+        int n_loggers_declared = 5;
     public:
-        Logger(LogStrategy* logstrategies);
+        Logger();
+        ~Logger();
+        void add_logstrategy(LogStrategy* logstrategy);
         void log(std::string message);
         void commit();
 };
