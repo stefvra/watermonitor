@@ -126,7 +126,7 @@ Logger logger;
           return true;
         }
       delay(500);
-      Serial.print(".");
+      logger.log(".");
     }
     return false;
   }
@@ -135,7 +135,7 @@ Logger logger;
 #ifdef GSM
   bool setup_gsm() {
 
-    logger.log("Starting modem connection...");
+    logger.log("start modem conn...");
     // Set GSM module baud rate
     SerialAT.begin(115200);
     modem.setBaud(115200);
@@ -143,9 +143,9 @@ Logger logger;
 
     // Restart takes quite some time
     // To skip it, call init() instead of restart()
-    logger.log("Initializing modem...");
+    logger.log("modem init...");
     if (!modem.init()) {
-      Serial.println(" fail");
+      logger.log(" fail");
       return false;      
     };
 
@@ -158,7 +158,7 @@ Logger logger;
 
     if (SIM_PIN && modem.getSimStatus() != 3) { modem.simUnlock(SIM_PIN); }
 
-    logger.log("Waiting for network...");
+    logger.log("network init...");
     if (!modem.waitForNetwork(CONNECTION_TIMEOUT)) {
       logger.log(" fail");
       return false;
@@ -175,7 +175,7 @@ Logger logger;
 
     if (modem.isGprsConnected()) { logger.log("GPRS connected"); }
 
-    logger.log("signal quality (0-30): ");
+    logger.log("signal qual (0-30): ");
     logger.log(std::to_string(modem.getSignalQuality()));
     
     return true;
@@ -257,13 +257,13 @@ void print_wakeup_reason(){
 
 void start_deep_sleep() {
   #ifdef GSM
-    logger.log("Turning off SIM module...");
     digitalWrite(SIM800_PIN, HIGH);
+    logger.log("SIM module down...");
   #endif
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
-  logger.log("deep sleep mode set, sleeping for ");
+  logger.log("sleeping for ");
   logger.log(std::to_string(TIME_TO_SLEEP));
-  logger.log(" seconds...");
+  logger.log("s, goodnight...");
   logger.commit();
   delay(MQTT_DELAY_AFTER_PUBLISH); // time needed to finish mqtt publishing. Logging takes some time
   esp_deep_sleep_start();
@@ -273,12 +273,11 @@ void start_deep_sleep() {
 
 void publish_measurement(measurement result, std::string name) {
   if (result.valid) {
-    logger.log("starting publish");
+    logger.log("start pub" + name);
     message = "{ \"" + name + "\": " + std::to_string(result.value) + "}";
-    logger.log(message.c_str());
     mqtt.publish(TOPIC, message.c_str());
   } else {
-    logger.log("result not valid, not publishing");
+    logger.log("result not valid");
   }
 
 }
@@ -339,13 +338,13 @@ void setup() {
 
 
   // perform measurements
-  logger.log("Starting distance measurement...");
+  logger.log("Start dist meas...");
   distance = distancesensor.measure();
   publish_measurement(distance, V1_NAME);
-  logger.log("Starting temperature measurement...");
+  logger.log("Start temp meas...");
   temp = temperaturesensor.measure();
   publish_measurement(temp, V3_NAME);
-  logger.log("Starting vbat measurement...");
+  logger.log("Start vbat meas...");
   vbat = vbatsensor.measure();
   publish_measurement(vbat, V2_NAME);  
     
