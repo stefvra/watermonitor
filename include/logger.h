@@ -21,6 +21,7 @@ class MQTTLogEndpoint : public LogEndpoint {
     private:
         PubSubClient* mqtt_client;
         std::string topic;
+        const int max_message_size = 100;
     public:
         MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic);
         ~MQTTLogEndpoint();
@@ -69,4 +70,3 @@ class Logger {
         void commit();
 };
 
-extern Logger logger;

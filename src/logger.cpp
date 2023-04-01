@@ -19,7 +19,45 @@ MQTTLogEndpoint::MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic) :
 MQTTLogEndpoint::~MQTTLogEndpoint() {};
 
 void MQTTLogEndpoint::log(std::string message) {
-    mqtt_client->publish(topic.c_str(), message.c_str());
+    int n_messages = (message.length() / max_message_size) + 1;
+    int start_index = 0;
+    std::string message_part;
+    Serial.print("topic: ");
+    Serial.println(topic.c_str());
+
+    for (int i = 0; (i * max_message_size) < message.length(); i++) {
+        start_index = i * max_message_size;
+        if ((start_index + max_message_size) < message.length()) {
+            message_part = "p" + std::to_string(i) + ":" + message.substr(start_index, max_message_size);
+        } else {
+            message_part = "p" + std::to_string(i) + ":" + message.substr(start_index);     
+        }
+        Serial.print("message: ");
+        Serial.println(message_part.c_str());
+        mqtt_client->publish(topic.c_str(), message_part.c_str());        
+        delay(500);        
+    }
+
+    /*
+    while (start_index < message.length())
+    {
+        start_index = i * max_message_size;
+        i++;
+        if ((start_index + max_message_size) < message.length()) {
+            message_part = "p" + std::to_string(i) + ":" + message.substr(start_index, max_message_size);
+        } else {
+            message_part = "p" + std::to_string(i) + ":" + message.substr(start_index);     
+        }
+        Serial.print("message: ");
+        Serial.println(message_part.c_str());
+        mqtt_client->publish(topic.c_str(), message_part.c_str());        
+        delay(500);
+    }
+    */
+  
+    // mqtt_client->publish(topic.c_str(), message.c_str());
+
+
 };
 
 

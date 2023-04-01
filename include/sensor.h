@@ -8,6 +8,7 @@
 #define FAULTY_MEASUREMENT FLT_MAX
 #define FAULTY_MEASUREMENT_INITIALIZER { .value = 0, .valid = false}
 
+extern Logger logger;
 
 
 struct measurement {

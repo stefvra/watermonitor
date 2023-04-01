@@ -32,7 +32,7 @@ The range readings are in units of mm. */
 #define EEPROM_SIZE 12
 #define MQTT_MAX_RETRIES 5
 #define MQTT_DELAY_AFTER_PUBLISH 5000 // should be large enough to send logging info
-#define MQTT_BUFFERSIZE 32 * 256 // 32 times normal size for logging purposes. too large messages anyway not possible to send
+#define MQTT_BUFFERSIZE 4 * 256 // 32 times normal size for logging purposes. too large messages anyway not possible to send
 #define NR_MEASUREMENTS 3 /* amount of measurements to perform */
 
 // mqtt definitions
@@ -121,7 +121,7 @@ Logger logger;
           logger.log("");
           logger.log("WiFi connected");
           logger.log("IP address: ");
-          logger.log(WiFi.localIP());
+          logger.log(std::to_string(WiFi.localIP()));
           // client.setCACert(root_ca); // secure client to be implemented
           return true;
         }
@@ -135,7 +135,7 @@ Logger logger;
 #ifdef GSM
   bool setup_gsm() {
 
-    logger.log("start modem conn...");
+    logger.log("m conn");
     // Set GSM module baud rate
     SerialAT.begin(115200);
     modem.setBaud(115200);
@@ -143,7 +143,7 @@ Logger logger;
 
     // Restart takes quite some time
     // To skip it, call init() instead of restart()
-    logger.log("modem init...");
+    logger.log("m init...");
     if (!modem.init()) {
       logger.log(" fail");
       return false;      
@@ -152,20 +152,20 @@ Logger logger;
 
     char modemInfo_char[100];
     modem.getModemInfo().toCharArray(modemInfo_char, 100);
-    logger.log("Modem Info: ");
+    logger.log("M Info ");
     logger.log(modemInfo_char);
 
 
     if (SIM_PIN && modem.getSimStatus() != 3) { modem.simUnlock(SIM_PIN); }
 
-    logger.log("network init...");
+    logger.log("nw init...");
     if (!modem.waitForNetwork(CONNECTION_TIMEOUT)) {
       logger.log(" fail");
       return false;
     }
     logger.log(" success");
 
-    logger.log("Connecting to ");
+    logger.log("Conn to ");
     logger.log(APN);
     if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
       logger.log(" fail");
@@ -173,9 +173,9 @@ Logger logger;
     }
     logger.log(" success");
 
-    if (modem.isGprsConnected()) { logger.log("GPRS connected"); }
+    if (modem.isGprsConnected()) { logger.log("GPRS ok"); }
 
-    logger.log("signal qual (0-30): ");
+    logger.log("sq ");
     logger.log(std::to_string(modem.getSignalQuality()));
     
     return true;
@@ -194,16 +194,16 @@ bool setup_mqtt() {
   int mqtt_retries = 0;
   while (mqtt_retries < MQTT_MAX_RETRIES) {
     mqtt_retries++;
-    logger.log("Attempting MQTT connection...");
+    logger.log("MQTT conn...");
     // Attempt to connect
     if (mqtt.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
-      logger.log("connected");
+      logger.log("ok");
       mqtt.loop();  
       return true;
     } else {
       logger.log("failed, rc=");
       logger.log(std::to_string(mqtt.state()));
-      logger.log(" try again in 3 seconds");
+      logger.log(" retry in 3s");
       // Wait 5 seconds before retrying
       delay(3000);
     }
@@ -243,11 +243,11 @@ void print_wakeup_reason(){
   {
     case ESP_SLEEP_WAKEUP_EXT0 : logger.log("Wakeup caused by external signal using RTC_IO"); break;
     case ESP_SLEEP_WAKEUP_EXT1 : logger.log("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER : logger.log("Wakeup caused by timer"); break;
+    case ESP_SLEEP_WAKEUP_TIMER : logger.log("timer Wakeup"); break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD : logger.log("Wakeup caused by touchpad"); break;
     case ESP_SLEEP_WAKEUP_ULP : logger.log("Wakeup caused by ULP program"); break;
     default : {
-      logger.log("Wakeup was not caused by deep sleep: ");
+      logger.log("faulty wakeup");
       logger.log(std::to_string(wakeup_reason));
       break;
       }
@@ -256,15 +256,16 @@ void print_wakeup_reason(){
 
 
 void start_deep_sleep() {
+  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   #ifdef GSM
     digitalWrite(SIM800_PIN, HIGH);
-    logger.log("SIM module down...");
+    logger.log("SIM down");
   #endif
-  esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   logger.log("sleeping for ");
   logger.log(std::to_string(TIME_TO_SLEEP));
   logger.log("s, goodnight...");
   logger.commit();
+  Serial.println("really going to sleep now...");
   delay(MQTT_DELAY_AFTER_PUBLISH); // time needed to finish mqtt publishing. Logging takes some time
   esp_deep_sleep_start();
 }
@@ -273,11 +274,12 @@ void start_deep_sleep() {
 
 void publish_measurement(measurement result, std::string name) {
   if (result.valid) {
-    logger.log("start pub" + name);
+    logger.log("start pub " + name);
     message = "{ \"" + name + "\": " + std::to_string(result.value) + "}";
     mqtt.publish(TOPIC, message.c_str());
+    delay(100);
   } else {
-    logger.log("result not valid");
+    logger.log("r not valid");
   }
 
 }
@@ -305,7 +307,7 @@ void setup() {
   digitalWrite(LED_PIN, HIGH);
 
   print_wakeup_reason();
-  logger.log("consecutive false startups: ");
+  logger.log("false sups: ");
   logger.log(std::to_string(get_consecutive_false_startups()));
 
 
