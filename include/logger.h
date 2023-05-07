@@ -21,9 +21,9 @@ class MQTTLogEndpoint : public LogEndpoint {
     private:
         PubSubClient* mqtt_client;
         std::string topic;
-        const int max_message_size = 100;
+        int max_message_size;
     public:
-        MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic);
+        MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic, int max_message_size=100);
         ~MQTTLogEndpoint();
         void log(std::string message);
 };

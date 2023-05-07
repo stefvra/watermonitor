@@ -14,7 +14,7 @@ void SerialLogEndpoint::log(std::string message) {
 };
 
 
-MQTTLogEndpoint::MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic) :  mqtt_client{mqtt_client}, topic{topic} {};
+MQTTLogEndpoint::MQTTLogEndpoint(PubSubClient* mqtt_client, std::string topic, int max_message_size) :  mqtt_client{mqtt_client}, topic{topic}, max_message_size{max_message_size} {};
 
 MQTTLogEndpoint::~MQTTLogEndpoint() {};
 

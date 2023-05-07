@@ -24,11 +24,15 @@ The range readings are in units of mm. */
 
 #define GSM // GSM or WIFI
 
+// ADDED
+#define WIFI // GSM or WIFI
+
+
 
 
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  1800ULL //3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
 #define MQTT_MAX_RETRIES 5
 #define MQTT_DELAY_AFTER_PUBLISH 5000 // should be large enough to send logging info
@@ -43,18 +47,18 @@ std::string V2_NAME = "vbat";
 std::string V3_NAME = "temperature";
 
 // gpio definitions
-#define VBAT_PIN 14 
+#define VBAT_PIN 34
 #define LED_PIN 19   
 
 #ifdef GSM
   #define TINY_GSM_MODEM_SIM800
   #include <TinyGsmClient.h>
   #define SerialAT Serial2
-  #define SIM800_PIN 12   
+  #define SIM800_PIN 33   
   #define CONNECTION_TIMEOUT 25000L // time in ms to try getting network connection
 
   // debugging option
-  // #define DUMP_AT_COMMANDS
+  #define DUMP_AT_COMMANDS
   #ifdef DUMP_AT_COMMANDS
     #include <StreamDebugger.h>
     StreamDebugger debugger(SerialAT, Serial);
@@ -68,6 +72,7 @@ std::string V3_NAME = "temperature";
   WiFiClient client; // secure client to be implemented
   #define MAX_WIFI_RETRIES 20
 #endif
+
 
 PubSubClient mqtt(client);
 
@@ -99,6 +104,17 @@ LazyLogStrategy mqtt_logger(&mqtt_logendpoint);
 
 SerialLogEndpoint seriallogendpoint;
 EagerLogStrategy seriallogger(&seriallogendpoint);
+
+
+// ADDED
+WiFiClient wifi_client; // secure client to be implemented
+#define MAX_WIFI_RETRIES 20
+PubSubClient wifi_mqtt(wifi_client);
+MQTTLogEndpoint wifi_mqtt_logendpoint(&wifi_mqtt, std::string(LOG_TOPIC), 1000);
+LazyLogStrategy wifi_mqtt_logger(&wifi_mqtt_logendpoint);
+
+
+
 
 
 Logger logger;
@@ -167,7 +183,7 @@ Logger logger;
 
     logger.log("Conn to ");
     logger.log(APN);
-    if (!modem.gprsConnect(APN, GPRS_USER, GPRS_PASS)) {
+    if (!modem.gprsConnect(APN)) {
       logger.log(" fail");
       return false;
     }
@@ -185,10 +201,10 @@ Logger logger;
 #endif
 
 
-bool setup_mqtt() {
+bool setup_mqtt(PubSubClient& mqtt_client) {
 
-  mqtt.setBufferSize(MQTT_BUFFERSIZE);
-  mqtt.setServer(MQTT_IP, MQTT_PORT);
+  mqtt_client.setBufferSize(MQTT_BUFFERSIZE);
+  mqtt_client.setServer(MQTT_IP, MQTT_PORT);
 
   // Loop until we're reconnected
   int mqtt_retries = 0;
@@ -196,13 +212,13 @@ bool setup_mqtt() {
     mqtt_retries++;
     logger.log("MQTT conn...");
     // Attempt to connect
-    if (mqtt.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
+    if (mqtt_client.connect("ESP8266Client", MQTT_UN, MQTT_PWD)) {
       logger.log("ok");
-      mqtt.loop();  
+      mqtt_client.loop();  
       return true;
     } else {
       logger.log("failed, rc=");
-      logger.log(std::to_string(mqtt.state()));
+      logger.log(std::to_string(mqtt_client.state()));
       logger.log(" retry in 3s");
       // Wait 5 seconds before retrying
       delay(3000);
@@ -301,6 +317,8 @@ void setup() {
   // setup loggers
   logger.add_logstrategy(&seriallogger);
   logger.add_logstrategy(&mqtt_logger);
+  // ADDED
+  logger.add_logstrategy(&wifi_mqtt_logger);
 
   // set control led
   pinMode(LED_PIN, OUTPUT);
@@ -320,13 +338,15 @@ void setup() {
     pinMode(SIM800_PIN, OUTPUT);
     digitalWrite(SIM800_PIN, HIGH);
     if (setup_gsm()) {
-      if (setup_mqtt()) {
+      if (setup_mqtt(mqtt)) {
         online = true;
       };
     };
-  #else
+  #endif
+
+  #ifdef WIFI
     if (setup_wifi()) {
-      if (setup_mqtt()) {
+      if (setup_mqtt(wifi_mqtt)) {
         online = true;
       };
     };
