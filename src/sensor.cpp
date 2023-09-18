@@ -115,6 +115,8 @@ bool DistanceSensor::init() {
     // increase laser pulse periods (defaults are 14 and 10 PCLKs)
     sensor->setVcselPulsePeriod(VL53L0X::VcselPeriodPreRange, 18);
     sensor->setVcselPulsePeriod(VL53L0X::VcselPeriodFinalRange, 14);
+    // increase timing budget to 200 ms for high accuracy
+    sensor->setMeasurementTimingBudget(200000);
     return true;
   }
 

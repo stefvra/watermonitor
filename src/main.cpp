@@ -22,17 +22,16 @@ The range readings are in units of mm. */
 #include "logger.h"
 
 
-#define GSM // GSM or WIFI
-
-// ADDED
-#define WIFI // GSM or WIFI
+// define connections to be active
+#define GSM
+// #define WIFI
 
 
 
 
 
 #define uS_TO_S_FACTOR 1000000ULL  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  3600 * 6  /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  60 * 30  /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 12
 #define MQTT_MAX_RETRIES 5
 #define MQTT_DELAY_AFTER_PUBLISH 5000 // should be large enough to send logging info
@@ -47,18 +46,18 @@ std::string V2_NAME = "vbat";
 std::string V3_NAME = "temperature";
 
 // gpio definitions
-#define VBAT_PIN 34
+#define VBAT_PIN 34   // GPIO nr. is 34 for LOLIN32, 34 for breadboard setup
 #define LED_PIN 19   
 
 #ifdef GSM
   #define TINY_GSM_MODEM_SIM800
   #include <TinyGsmClient.h>
   #define SerialAT Serial2
-  #define SIM800_PIN 33   
+  #define SIM800_PIN 33   // GPIO nr. is 33 for LOLIN32, 32 for breadboard setup
   #define CONNECTION_TIMEOUT 25000L // time in ms to try getting network connection
 
   // debugging option
-  #define DUMP_AT_COMMANDS
+  // #define DUMP_AT_COMMANDS
   #ifdef DUMP_AT_COMMANDS
     #include <StreamDebugger.h>
     StreamDebugger debugger(SerialAT, Serial);
@@ -67,14 +66,17 @@ std::string V3_NAME = "temperature";
     TinyGsm        modem(SerialAT);
   #endif
   
-  TinyGsmClient client(modem);
-#else
+  TinyGsmClient gsm_client(modem);
+#endif
+
+#ifdef WIFI
   WiFiClient client; // secure client to be implemented
   #define MAX_WIFI_RETRIES 20
 #endif
 
 
-PubSubClient mqtt(client);
+// mqtt client, correct client to be added as argument (gms or wifi)
+PubSubClient mqtt(gsm_client);
 
 
 bool online;
@@ -94,7 +96,8 @@ SensorValidator temperaturesensor(&_temperaturesensor, 5, -10, 50);
 measurement vbat;
 VoltageSensor ___vbatsensor(VBAT_PIN);
 SensorInitializer __vbatsensor(&___vbatsensor);
-SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0);
+SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72, 0); // for LOLIN32 setup
+// SensorScaler _vbatsensor(&__vbatsensor, 2 * 3.3 / 4095 * 4.81 / 4.72 * 4.09 / 3.59, 0); // for ESP32 breadboard setup
 SensorValidator vbatsensor(&_vbatsensor, 5, 3, 5);
 
 
@@ -104,18 +107,6 @@ LazyLogStrategy mqtt_logger(&mqtt_logendpoint);
 
 SerialLogEndpoint seriallogendpoint;
 EagerLogStrategy seriallogger(&seriallogendpoint);
-
-
-// ADDED
-WiFiClient wifi_client; // secure client to be implemented
-#define MAX_WIFI_RETRIES 20
-PubSubClient wifi_mqtt(wifi_client);
-MQTTLogEndpoint wifi_mqtt_logendpoint(&wifi_mqtt, std::string(LOG_TOPIC), 1000);
-LazyLogStrategy wifi_mqtt_logger(&wifi_mqtt_logendpoint);
-
-
-
-
 
 Logger logger;
 
@@ -317,8 +308,6 @@ void setup() {
   // setup loggers
   logger.add_logstrategy(&seriallogger);
   logger.add_logstrategy(&mqtt_logger);
-  // ADDED
-  logger.add_logstrategy(&wifi_mqtt_logger);
 
   // set control led
   pinMode(LED_PIN, OUTPUT);
@@ -331,6 +320,18 @@ void setup() {
 
   // startup I2C communication
   Wire.begin();
+
+  // perform measurements before going online
+  logger.log("Start dist meas...");
+  distance = distancesensor.measure();
+  logger.log("Start temp meas...");
+  temp = temperaturesensor.measure();
+  logger.log("Start vbat meas...");
+  vbat = vbatsensor.measure();
+
+
+
+
 
   // stetup mqtt connection
   #ifdef GSM
@@ -359,15 +360,12 @@ void setup() {
   }
 
 
-  // perform measurements
-  logger.log("Start dist meas...");
-  distance = distancesensor.measure();
+  // publish measurements
+  logger.log("Publishing dist meas...");
   publish_measurement(distance, V1_NAME);
-  logger.log("Start temp meas...");
-  temp = temperaturesensor.measure();
+  logger.log("Publishing temp meas...");
   publish_measurement(temp, V3_NAME);
-  logger.log("Start vbat meas...");
-  vbat = vbatsensor.measure();
+  logger.log("Publishing vbat meas...");
   publish_measurement(vbat, V2_NAME);  
     
   
